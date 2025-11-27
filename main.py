@@ -41,6 +41,7 @@ class ExecSummaryRequest(BaseModel):
     drawing_s3_key: str
     submission_key: str
     page_num: str
+    old_submission_key: str  # Explicit old submission key for path construction
     user_id: Optional[str] = None
     new_drawing_s3_key: Optional[str] = None
     legend_data: Optional[list] = None
@@ -80,6 +81,7 @@ async def generate_executive_summary(request: ExecSummaryRequest):
             legend_data=legend_data,
             submission_key=request.submission_key,
             page_num=request.page_num,
+            old_submission_key=request.old_submission_key,
             new_drawing_s3_key=request.new_drawing_s3_key
         )
 

@@ -181,7 +181,7 @@ class ReviewersExecSummaryGenerator:
             print(f"[DEBUG] ❌ Failed to save reviewers exec summary to S3: {e}")
             return None
 
-    async def reviewers_exec_summary(self, s3_service, bucket_name: str, drawing_s3_key: str, legend_data: dict, submission_key: str, page_num: str, new_drawing_s3_key: str = None) -> dict:
+    async def reviewers_exec_summary(self, s3_service, bucket_name: str, drawing_s3_key: str, legend_data: dict, submission_key: str, page_num: str, old_submission_key: str, new_drawing_s3_key: str = None) -> dict:
         """
         Generate a Reviewer's Executive Summary (JSON) for a TCP drawing.
         Inputs:
@@ -197,25 +197,13 @@ class ReviewersExecSummaryGenerator:
         submission_id = f"{submission_key}/{page_num}"
 
         # Extract user_id from drawing_s3_key
-        # Extract current_submission_key from new_drawing_s3_key
-        # Extract old_submission_key from drawing filename
         path_parts = drawing_s3_key.split('/')
         user_id = path_parts[1] if len(path_parts) > 1 else "unknown"
 
-        if new_drawing_s3_key:
-            # Extract current submission key from new drawing S3 key
-            new_path_parts = new_drawing_s3_key.split('/')
-            new_drawing_filename = new_path_parts[-1] if len(new_path_parts) > 0 else ""
-            # Extract submission key from filename: submission52-page1.webp -> submission52
-            current_submission_key = new_drawing_filename.split('-')[0] if '-' in new_drawing_filename else new_drawing_filename.split('.')[0]
-        else:
-            # Fallback to using submission_key parameter
-            current_submission_key = submission_key
+        # Use submission_key parameter as current_submission_key
+        current_submission_key = submission_key
 
-        # Extract old submission key from the drawing filename
-        # Example: submission51-page1.webp -> submission51
-        drawing_filename = path_parts[-1] if len(path_parts) > 0 else ""
-        old_submission_key = drawing_filename.split('-')[0] if '-' in drawing_filename else submission_key
+        # old_submission_key is now passed as a parameter (no longer extracted from filename)
 
         # Generate S3 config path
         config_path = await self._get_config_s3_path(s3_service, user_id, current_submission_key, old_submission_key, page_num)
@@ -261,6 +249,8 @@ class ReviewersExecSummaryGenerator:
                 # Download image from S3
                 s3_obj = s3_service.s3_client.get_object(Bucket=bucket_name, Key=drawing_s3_key)
                 image_data = s3_obj['Body'].read()
+                original_size = len(image_data)
+                print(f"[DEBUG] Original image size: {original_size / (1024*1024):.2f} MB")
 
                 # Determine image format and filename
                 content_type = s3_obj.get('ContentType', 'image/webp')
@@ -273,8 +263,77 @@ class ReviewersExecSummaryGenerator:
                 else:
                     image_format = 'webp'  # default
 
-                # Create a file-like object for upload
+                # Compress image if it exceeds OpenAI's 20MB limit
                 import io
+                from PIL import Image
+
+                MAX_SIZE_MB = 20
+                MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+
+                if original_size > MAX_SIZE_BYTES:
+                    print(f"[DEBUG] Image exceeds {MAX_SIZE_MB}MB limit, compressing...")
+
+                    # Increase Pillow's decompression bomb limit for legitimate large images
+                    # Default is ~89MP, we'll allow up to 500MP for high-res technical drawings
+                    Image.MAX_IMAGE_PIXELS = 500_000_000
+
+                    # Load image with PIL
+                    img = Image.open(io.BytesIO(image_data))
+                    print(f"[DEBUG] Original dimensions: {img.size[0]}x{img.size[1]}, mode: {img.mode}")
+
+                    # Convert to RGB if necessary (required for JPEG)
+                    if img.mode in ('RGBA', 'P', 'LA'):
+                        # Create white background for transparency
+                        background = Image.new('RGB', img.size, (255, 255, 255))
+                        if img.mode == 'P':
+                            img = img.convert('RGBA')
+                        background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                        img = background
+                    elif img.mode != 'RGB':
+                        img = img.convert('RGB')
+
+                    # Try compression with progressively higher compression
+                    quality = 85
+                    output_format = 'JPEG'  # JPEG compresses better than PNG/WebP for photos
+
+                    while quality > 20:
+                        output = io.BytesIO()
+                        img.save(output, format=output_format, quality=quality, optimize=True)
+                        compressed_size = output.tell()
+
+                        if compressed_size <= MAX_SIZE_BYTES:
+                            print(f"[DEBUG] Compressed to {compressed_size / (1024*1024):.2f} MB with quality={quality}")
+                            image_data = output.getvalue()
+                            image_format = 'jpeg'
+                            break
+
+                        quality -= 10
+
+                    # If still too large after max compression, resize the image
+                    if compressed_size > MAX_SIZE_BYTES:
+                        print(f"[DEBUG] Still too large, resizing image...")
+                        scale_factor = 0.8
+
+                        while compressed_size > MAX_SIZE_BYTES and scale_factor > 0.3:
+                            new_width = int(img.size[0] * scale_factor)
+                            new_height = int(img.size[1] * scale_factor)
+                            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                            output = io.BytesIO()
+                            resized_img.save(output, format=output_format, quality=75, optimize=True)
+                            compressed_size = output.tell()
+
+                            if compressed_size <= MAX_SIZE_BYTES:
+                                print(f"[DEBUG] Resized to {new_width}x{new_height} and compressed to {compressed_size / (1024*1024):.2f} MB")
+                                image_data = output.getvalue()
+                                image_format = 'jpeg'
+                                break
+
+                            scale_factor -= 0.1
+
+                    print(f"[DEBUG] Final compressed size: {len(image_data) / (1024*1024):.2f} MB")
+
+                # Create a file-like object for upload
                 image_file = io.BytesIO(image_data)
                 image_file.name = f"drawing.{image_format}"
 

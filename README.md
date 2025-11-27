@@ -84,14 +84,27 @@ Generate a reviewer's executive summary for a TCP drawing.
 **Request Body:**
 ```json
 {
-  "drawing_s3_key": "documents/user123/submission1/drawing.webp",
-  "submission_key": "submission1",
-  "page_num": "page1",
+  "drawing_s3_key": "documents/user123/submission1/rasterize/page1.png",
+  "submission_key": "submission2",
+  "page_num": "1",
+  "old_submission_key": "submission1",
   "user_id": "user123",
-  "new_drawing_s3_key": "documents/user123/submission2/drawing.webp",
+  "new_drawing_s3_key": "documents/user123/submission2/rasterize/page1.png",
   "legend_data": []
 }
 ```
+
+**Parameters:**
+- `drawing_s3_key`: S3 key for the old submission's drawing image
+- `submission_key`: Current submission key (where results will be saved)
+- `page_num`: Page number (numeric string, e.g., "1", "2", etc.)
+- `old_submission_key`: Old submission key for comparison (used in reconciliation path)
+- `user_id`: (Optional) User ID - will be extracted from drawing_s3_key if not provided
+- `new_drawing_s3_key`: (Optional) S3 key for the new submission's drawing image
+- `legend_data`: (Optional) Legend detection data - will be fetched from S3 if not provided
+
+**Output Path:**
+Results are saved to: `documents/{user_id}/{submission_key}/reconciliation/{old_submission_key}/{page_num}/reviewers_exec_summary.json`
 
 **Response:**
 ```json
@@ -127,9 +140,12 @@ Check if the service is running.
 curl -X POST http://localhost:8001/generate-exec-summary \
   -H "Content-Type: application/json" \
   -d '{
-    "drawing_s3_key": "documents/user123/submission1/drawing.webp",
-    "submission_key": "submission1",
-    "page_num": "page1"
+    "drawing_s3_key": "documents/user123/submission1/rasterize/page1.png",
+    "submission_key": "submission2",
+    "page_num": "1",
+    "old_submission_key": "submission1",
+    "user_id": "user123",
+    "new_drawing_s3_key": "documents/user123/submission2/rasterize/page1.png"
   }'
 ```
 
@@ -141,9 +157,12 @@ import requests
 response = requests.post(
     "http://localhost:8001/generate-exec-summary",
     json={
-        "drawing_s3_key": "documents/user123/submission1/drawing.webp",
-        "submission_key": "submission1",
-        "page_num": "page1"
+        "drawing_s3_key": "documents/user123/submission1/rasterize/page1.png",
+        "submission_key": "submission2",
+        "page_num": "1",
+        "old_submission_key": "submission1",
+        "user_id": "user123",
+        "new_drawing_s3_key": "documents/user123/submission2/rasterize/page1.png"
     }
 )
 
@@ -155,14 +174,17 @@ print(response.json())
 ```python
 import httpx
 
-async def get_exec_summary(drawing_s3_key, submission_key, page_num):
+async def get_exec_summary(drawing_s3_key, submission_key, page_num, old_submission_key, user_id, new_drawing_s3_key):
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://reviewers-exec-summary-service:8001/generate-exec-summary",
             json={
                 "drawing_s3_key": drawing_s3_key,
                 "submission_key": submission_key,
-                "page_num": page_num
+                "page_num": page_num,
+                "old_submission_key": old_submission_key,
+                "user_id": user_id,
+                "new_drawing_s3_key": new_drawing_s3_key
             }
         )
         return response.json()
