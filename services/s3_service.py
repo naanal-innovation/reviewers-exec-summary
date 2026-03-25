@@ -66,6 +66,10 @@ class S3Service:
         # Force actual decode now
         img.load()
 
+        # Free the raw byte buffers now that image is decoded
+        bio.close()
+        del bio, data
+
         # Convert to a reliable mode for OpenCV/NumPy pipelines
         if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGB")
