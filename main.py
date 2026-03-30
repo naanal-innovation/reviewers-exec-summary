@@ -18,7 +18,9 @@ origins = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://gollab3aws.bizzaard.com",
-    "https://gollab3aws.bizzaard.com:443"
+    "https://gollab3aws.bizzaard.com:443",
+    "https://gollab3gpu.bizzaard.com",
+    "https://gollab3gpu.bizzaard.com:443"
 ]
 
 app.add_middleware(
