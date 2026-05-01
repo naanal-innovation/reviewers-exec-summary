@@ -3,7 +3,8 @@ import os
 import asyncio
 import time
 from dotenv import load_dotenv
-import openai
+from langfuse import observe
+from langfuse.openai import openai
 
 load_dotenv()
 
@@ -181,6 +182,7 @@ class ReviewersExecSummaryGenerator:
             print(f"[DEBUG] ❌ Failed to save reviewers exec summary to S3: {e}")
             return None
 
+    @observe(name="reviewers-exec-summary", capture_input=False, capture_output=False)
     async def reviewers_exec_summary(self, s3_service, bucket_name: str, drawing_s3_key: str, legend_data: dict, submission_key: str, page_num: str, old_submission_key: str, new_drawing_s3_key: str = None) -> dict:
         """
         Generate a Reviewer's Executive Summary (JSON) for a TCP drawing.
