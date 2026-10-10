@@ -1,0 +1,15 @@
+# Exclude auto-generated code and migrations
+prisma/generated/
+prisma/migrations/
+
+# Exclude documentation files from code security scans
+documents/
+*.md
+
+# Exclude dependencies and builds
+node_modules/
+dist/
+security-reports/
+.venv/*
+litho-docs/*
+test/
