@@ -9,7 +9,7 @@ ENV PIP_DEFAULT_TIMEOUT=300 \
     PIP_PROGRESS_BAR=off
 
 # Install system dependencies including image processing libraries
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libjpeg-dev \
@@ -27,6 +27,11 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Run as an unprivileged user that owns /app, since the service writes its
+# output files there.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
 
 # Expose port
 EXPOSE 8005
