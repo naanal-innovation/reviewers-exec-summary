@@ -224,11 +224,15 @@ class ReviewersExecSummaryGenerator:
             config = {}
             assistant_id = None
 
-        # Generate presigned URL for the drawing image (more efficient than base64)
-        # drawing_url = s3_service.generate_presigned_url(bucket_name, drawing_s3_key, expiration=3600)
-        # Use direct S3 URL since bucket is publicly accessible
-        drawing_url = f"https://{bucket_name}.s3.amazonaws.com/{drawing_s3_key}"
-        print(f"[DEBUG] Using direct S3 URL: {drawing_url}")
+        # The bucket is private, so OpenAI reads the drawing through a presigned
+        # URL (used when the file upload below fails). S3 serves the object's
+        # stored content type, which may be PNG or WebP.
+        drawing_url = s3_service.s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': drawing_s3_key},
+            ExpiresIn=3600,
+        )
+        print(f"[DEBUG] Using presigned S3 URL for key: {drawing_s3_key}")
         print(f"[DEBUG] Using bucket: {bucket_name}, key: {drawing_s3_key}")
 
         # Force file upload to ensure thread compatibility with intent parser
