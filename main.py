@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from keycloak_auth import KeycloakAuthMiddleware, require_keys, require_user
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import os
@@ -12,6 +13,10 @@ from services.s3_service import S3Service
 load_dotenv()
 
 app = FastAPI(title="Reviewers Executive Summary Generator Service")
+
+# Every endpoint except `/health` needs a Keycloak bearer token (keycloak_auth.py).
+# Added before CORSMiddleware so CORS wraps it and refusals reach the browser readable.
+app.add_middleware(KeycloakAuthMiddleware, public_paths=('/health',))
 
 # Configure CORS
 origins = [
@@ -49,8 +54,13 @@ class ExecSummaryRequest(BaseModel):
     legend_data: Optional[list] = None
 
 @app.post("/generate-exec-summary")
-async def generate_executive_summary(request: ExecSummaryRequest):
+async def generate_executive_summary(request: ExecSummaryRequest, http_request: Request):
     """Generate Reviewer's Executive Summary for a TCP drawing"""
+    # Drawings are read, and the summary written under the user id inside
+    # drawing_s3_key, with the task role: all must be the caller's own.
+    require_keys(http_request, [k for k in (request.drawing_s3_key, request.new_drawing_s3_key) if k is not None])
+    if request.user_id is not None:
+        require_user(http_request, request.user_id)
     try:
         bucket_name = os.getenv('AWS_S3_BUCKET')
         if not bucket_name:
