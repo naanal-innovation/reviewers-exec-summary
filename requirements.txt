@@ -1,5 +1,7 @@
 # Web Framework
-fastapi==0.104.1
+fastapi==0.115.14
+# fastapi 0.104 capped anyio below 4; anyio 3.x has a critical CVE
+anyio>=4.14.2
 uvicorn[standard]==0.24.0
 
 # AWS Services
